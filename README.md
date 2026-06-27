@@ -44,20 +44,37 @@ The credential is verified against `GET /api/v1/auth/me`.
 
 | Resource | Operations |
 | --- | --- |
-| **Contact** | Get Many, Get, Create, Update, Delete, Create or Update, Add Tags, Remove Tags, Add to List, Remove from List |
+| **Contact** | Get Many, Get, Create, Update, Delete, Create or Update, Get Activities, Add Tags, Remove Tags, Bulk Add Tags, Add to List, Remove from List |
+| **Contact Note** | Get Many, Create, Update, Delete |
 | **Tag** | Get Many, Create, Update, Delete |
 | **List** | Get Many, Create, Update, Delete |
-| **Event** | Get Many, Get, Get Registrations, Register Attendee |
-| **Course** | Get Many, Get, Enroll |
-| **Certification** | Get Many, Get |
-| **Conversation** | Get Many, Get, Send Message |
+| **Conversation** | Get Many, Get, Get Messages, Create, Send, Send Message, Update, Close, Reopen |
+| **Event** | Get Many, Get, Get Upcoming Sessions, Get Registrations, Register Attendee |
+| **Course** | Get Many, Get, Get Lessons, Get Enrollments, Enroll |
+| **Certification** | Get Many, Get, Get Download URL |
+| **Group** | Get Many, Get, Create, Update, Delete, Get Members, Invite |
+| **Membership** | Get Current, Get Many, Get |
 
-### Not yet supported
+Contact `Get Many` supports filtering by search, status, contact type, tag IDs,
+list IDs, and an `Updated Since` timestamp for incremental syncs.
 
-- **Appointments** — no REST API in the Pewpros app yet (managed in the UI only).
-- **Certification issuing** — issued by a background job, no REST endpoint yet.
+### Scope
 
-These will be added once the platform exposes REST endpoints for them.
+This node targets the **Bearer-token** REST surface (`/api/v1`), which covers the
+CRM, messaging, events, and learning resources used in automations. Other
+documented tiers are out of scope for this node because they use different
+credentials:
+
+- **Partner API** (`X-Partner-Key`) — facility/booking sync (customers, range
+  reservations, resource bookings, orders).
+- **Public funnel API** (`X-Tenant-Key`) — anonymous lead capture and public
+  event registration.
+
+App-internal surfaces (community, push notifications, wallet passes, telephony,
+QR, timers) are intentionally not exposed.
+
+The full API is documented at [pewpros.com/docs](https://pewpros.com/docs)
+(OpenAPI spec at `/api/docs/openapi.json`).
 
 ## Compatibility
 
