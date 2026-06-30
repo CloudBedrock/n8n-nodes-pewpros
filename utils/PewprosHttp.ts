@@ -1,5 +1,27 @@
 import { IDataObject, IHttpRequestMethods } from 'n8n-workflow';
 
+/**
+ * Refuse to send credentials over cleartext HTTP. The Bearer token would
+ * otherwise travel in the clear if a user misconfigured an `http://` base URL.
+ * Plain HTTP is allowed only for loopback hosts so local development still works.
+ */
+export function assertSecureBaseUrl(baseUrl: string): void {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    throw new Error(`Pewpros: invalid Base URL "${baseUrl}". Use a full https:// URL.`);
+  }
+
+  const isLoopback = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(url.hostname);
+  if (url.protocol !== 'https:' && !isLoopback) {
+    throw new Error(
+      `Pewpros: refusing to send credentials over insecure ${url.protocol}// to "${url.hostname}". ` +
+        'Use an https:// Base URL (http:// is permitted only for localhost).',
+    );
+  }
+}
+
 export interface PewprosHttpConfig {
   baseUrl: string;
   apiToken: string;
@@ -23,7 +45,9 @@ export class PewprosHttp {
 
   constructor(config: PewprosHttpConfig) {
     // Trim a trailing slash so path concatenation is predictable.
-    this.baseUrl = config.baseUrl.replace(/\/+$/, '');
+    const baseUrl = config.baseUrl.replace(/\/+$/, '');
+    assertSecureBaseUrl(baseUrl);
+    this.baseUrl = baseUrl;
     this.apiToken = config.apiToken;
     this.timeout = config.timeout ?? 30000;
   }
