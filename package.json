@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-pewpros",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "n8n community node for the Pewpros CRM, events, and learning platform",
   "keywords": [
     "n8n-community-node-package"
@@ -35,10 +35,12 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "dist/credentials/PewprosApi.credentials.js"
+      "dist/credentials/PewprosApi.credentials.js",
+      "dist/credentials/PewprosPartnerApi.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/Pewpros/Pewpros.node.js"
+      "dist/nodes/Pewpros/Pewpros.node.js",
+      "dist/nodes/Pewpros/PewprosTrigger.node.js"
     ]
   },
   "devDependencies": {
