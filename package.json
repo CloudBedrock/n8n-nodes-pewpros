@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-pewpros",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "n8n community node for the Pewpros CRM, events, and learning platform",
   "keywords": [
     "n8n-community-node-package"
@@ -40,6 +40,7 @@
     ],
     "nodes": [
       "dist/nodes/Pewpros/Pewpros.node.js",
+      "dist/nodes/Pewpros/PewprosPollTrigger.node.js",
       "dist/nodes/Pewpros/PewprosTrigger.node.js"
     ]
   },

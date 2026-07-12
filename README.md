@@ -4,8 +4,10 @@ This is an n8n community node. It lets you use the [Pewpros](https://pewpros.com
 CRM, events, and learning platform in your n8n workflows.
 
 Pewpros is a multi-tenant platform for contacts, tags, lists, events, courses,
-certifications, and conversations. This package provides an **action node** for
-the REST API and a **trigger node** that starts workflows from Pewpros events.
+certifications, conversations, waivers, and affiliate leads. This package
+provides an **action node** for the REST API, a **trigger node** that starts
+workflows from Pewpros outbound webhooks, and a **poll trigger node** for
+record types without webhook topics (waiver signatures, affiliate leads).
 
 [n8n](https://n8n.io) is a [fair-code licensed](https://docs.n8n.io/reference/license/)
 workflow automation platform.
@@ -14,6 +16,7 @@ workflow automation platform.
 [Credentials](#credentials)
 [Operations](#operations)
 [Trigger](#trigger)
+[Poll Trigger](#poll-trigger)
 [Compatibility](#compatibility)
 [Resources](#resources)
 
@@ -74,9 +77,16 @@ Verified against `GET /api/v1/partner/whoami`.
 | **Certification** | Get Many, Get, Get Download URL |
 | **Group** | Get Many, Get, Create, Update, Delete, Get Members, Invite |
 | **Membership** | Get Current, Get Many, Get |
+| **Waiver** | Get Many, Get, Get Many Signatures, Get Signature, Get Contact Status |
+| **Affiliate Lead** | Get Many, Get, Get Contact Attribution |
 
 Contact `Get Many` supports filtering by search, status, contact type, tag IDs,
-list IDs, and an `Updated Since` timestamp for incremental syncs.
+list IDs, and an `Updated Since` timestamp for incremental syncs. Waiver
+`Get Many Signatures` (filter by waiver, contact, event, or course) and
+Affiliate Lead `Get Many` (filter by status or source) follow the same
+`Updated Since` incremental-sync contract. `Get Contact Status` answers "has
+contact X signed waiver Y?"; `Get Contact Attribution` returns a contact's
+affiliate lead handoff rollup.
 
 ### Scope
 
@@ -117,6 +127,24 @@ Select one or more **Events**:
 `Pewpros-Signature: t=<unix>,v1=<hex>` where
 `v1 = HMAC_SHA256(secret, "<t>.<rawBody>")`. The node recomputes it with the
 subscription secret and rejects mismatches with `401`. Leave it enabled.
+
+## Poll Trigger
+
+Waiver signatures and affiliate leads are not (yet) outbound-webhook topics, so
+the **Pewpros Poll Trigger** node covers them by polling on the schedule you
+choose in n8n's **Poll Times** setting:
+
+- **New Waiver Signature** — optionally filtered by waiver, contact, event, or
+  course.
+- **New Affiliate Lead** — optionally filtered by status or source.
+
+It uses the API's `updated_since` cursor (inclusive, ascending): each poll
+fetches everything updated since the last high-water mark, advances the cursor,
+and dedupes the boundary so records are emitted exactly once. The first poll
+after activation sets the cursor to "now" rather than replaying history; a
+manual test run returns the most recent records without moving the cursor.
+Note the cursor fires on *updates* too — a signature or lead that is modified
+later will be emitted again.
 
 ## Compatibility
 

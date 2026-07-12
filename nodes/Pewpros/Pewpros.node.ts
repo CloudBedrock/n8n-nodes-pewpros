@@ -92,7 +92,7 @@ export class Pewpros implements INodeType {
     version: 1,
     subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
     description:
-      'Work with Pewpros contacts, notes, tags, lists, conversations, events, courses, certifications, groups, and memberships',
+      'Work with Pewpros contacts, notes, tags, lists, conversations, events, courses, certifications, groups, memberships, waivers, and affiliate leads',
     defaults: {
       name: 'Pewpros',
     },
@@ -111,6 +111,7 @@ export class Pewpros implements INodeType {
         type: 'options',
         noDataExpression: true,
         options: [
+          { name: 'Affiliate Lead', value: 'affiliateLead' },
           { name: 'Certification', value: 'certification' },
           { name: 'Contact', value: 'contact' },
           { name: 'Contact Note', value: 'contactNote' },
@@ -121,6 +122,7 @@ export class Pewpros implements INodeType {
           { name: 'List', value: 'list' },
           { name: 'Membership', value: 'membership' },
           { name: 'Tag', value: 'tag' },
+          { name: 'Waiver', value: 'waiver' },
         ],
         default: 'contact',
       },
@@ -935,6 +937,139 @@ export class Pewpros implements INodeType {
         displayOptions: { show: { resource: ['membership'], operation: ['get'] } },
         description: 'The ID of the membership',
       },
+
+      // ----------------------------------------------------------------- Waiver
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: { show: { resource: ['waiver'] } },
+        options: [
+          { name: 'Get', value: 'get', action: 'Get a waiver template' },
+          {
+            name: 'Get Contact Status',
+            value: 'getContactStatus',
+            action: 'Check whether a contact has signed a waiver',
+          },
+          { name: 'Get Many', value: 'getAll', action: 'Get many waiver templates' },
+          {
+            name: 'Get Many Signatures',
+            value: 'getAllSignatures',
+            action: 'Get many waiver signatures',
+          },
+          { name: 'Get Signature', value: 'getSignature', action: 'Get a waiver signature' },
+        ],
+        default: 'getAll',
+      },
+      {
+        displayName: 'Waiver ID',
+        name: 'waiverId',
+        type: 'string',
+        required: true,
+        default: '',
+        displayOptions: { show: { resource: ['waiver'], operation: ['get', 'getContactStatus'] } },
+        description: 'The ID of the waiver template',
+      },
+      {
+        displayName: 'Signature ID',
+        name: 'signatureId',
+        type: 'string',
+        required: true,
+        default: '',
+        displayOptions: { show: { resource: ['waiver'], operation: ['getSignature'] } },
+        description: 'The ID of the waiver signature',
+      },
+      {
+        displayName: 'Contact ID',
+        name: 'waiverContactId',
+        type: 'string',
+        required: true,
+        default: '',
+        displayOptions: { show: { resource: ['waiver'], operation: ['getContactStatus'] } },
+        description: 'The ID of the contact to check',
+      },
+      {
+        displayName: 'Filters',
+        name: 'signatureFilters',
+        type: 'collection',
+        placeholder: 'Add Filter',
+        default: {},
+        displayOptions: { show: { resource: ['waiver'], operation: ['getAllSignatures'] } },
+        options: [
+          { displayName: 'Contact ID', name: 'contact_id', type: 'string', default: '' },
+          { displayName: 'Course ID', name: 'course_id', type: 'string', default: '' },
+          { displayName: 'Event ID', name: 'event_id', type: 'string', default: '' },
+          { displayName: 'Page', name: 'page', type: 'number', default: 1 },
+          { displayName: 'Per Page', name: 'per_page', type: 'number', default: 25 },
+          {
+            displayName: 'Updated Since',
+            name: 'updated_since',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return signatures updated at or after this time (ISO 8601)',
+          },
+          { displayName: 'Waiver ID', name: 'waiver_id', type: 'string', default: '' },
+        ],
+      },
+
+      // ----------------------------------------------------------- Affiliate Lead
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: { show: { resource: ['affiliateLead'] } },
+        options: [
+          { name: 'Get', value: 'get', action: 'Get an affiliate lead' },
+          {
+            name: 'Get Contact Attribution',
+            value: 'getContactAttribution',
+            action: 'Get the affiliate attribution rollup for a contact',
+          },
+          { name: 'Get Many', value: 'getAll', action: 'Get many affiliate leads' },
+        ],
+        default: 'getAll',
+      },
+      {
+        displayName: 'Lead ID',
+        name: 'affiliateLeadId',
+        type: 'string',
+        required: true,
+        default: '',
+        displayOptions: { show: { resource: ['affiliateLead'], operation: ['get'] } },
+        description: 'The ID of the affiliate lead submission',
+      },
+      {
+        displayName: 'Contact ID',
+        name: 'attributionContactId',
+        type: 'string',
+        required: true,
+        default: '',
+        displayOptions: { show: { resource: ['affiliateLead'], operation: ['getContactAttribution'] } },
+        description: 'The ID of the contact to get the attribution rollup for',
+      },
+      {
+        displayName: 'Filters',
+        name: 'leadFilters',
+        type: 'collection',
+        placeholder: 'Add Filter',
+        default: {},
+        displayOptions: { show: { resource: ['affiliateLead'], operation: ['getAll'] } },
+        options: [
+          { displayName: 'Page', name: 'page', type: 'number', default: 1 },
+          { displayName: 'Per Page', name: 'per_page', type: 'number', default: 25 },
+          { displayName: 'Source', name: 'source', type: 'string', default: '' },
+          { displayName: 'Status', name: 'status', type: 'string', default: '' },
+          {
+            displayName: 'Updated Since',
+            name: 'updated_since',
+            type: 'dateTime',
+            default: '',
+            description: 'Only return leads updated at or after this time (ISO 8601)',
+          },
+        ],
+      },
     ],
   };
 
@@ -1183,6 +1318,29 @@ export class Pewpros implements INodeType {
             path = '/api/v1/memberships';
           } else if (operation === 'get') {
             path = `/api/v1/memberships/${this.getNodeParameter('membershipId', i)}`;
+          }
+        } else if (resource === 'waiver') {
+          if (operation === 'getAll') {
+            path = '/api/v1/waivers';
+          } else if (operation === 'get') {
+            path = `/api/v1/waivers/${this.getNodeParameter('waiverId', i)}`;
+          } else if (operation === 'getAllSignatures') {
+            path = '/api/v1/waiver-signatures';
+            qs = compact(this.getNodeParameter('signatureFilters', i, {}) as IDataObject);
+          } else if (operation === 'getSignature') {
+            path = `/api/v1/waiver-signatures/${this.getNodeParameter('signatureId', i)}`;
+          } else if (operation === 'getContactStatus') {
+            path = `/api/v1/contacts/${this.getNodeParameter('waiverContactId', i)}/waiver-status`;
+            qs = { waiver_id: this.getNodeParameter('waiverId', i) };
+          }
+        } else if (resource === 'affiliateLead') {
+          if (operation === 'getAll') {
+            path = '/api/v1/affiliate-leads';
+            qs = compact(this.getNodeParameter('leadFilters', i, {}) as IDataObject);
+          } else if (operation === 'get') {
+            path = `/api/v1/affiliate-leads/${this.getNodeParameter('affiliateLeadId', i)}`;
+          } else if (operation === 'getContactAttribution') {
+            path = `/api/v1/contacts/${this.getNodeParameter('attributionContactId', i)}/affiliate-attribution`;
           }
         }
 
