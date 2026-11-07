@@ -25,8 +25,8 @@
     "build": "npx rimraf dist && tsc && gulp build:icons && cp package.json dist/",
     "dev": "tsc --watch",
     "format": "prettier nodes credentials --write",
-    "lint": "eslint nodes/**/*.ts credentials/**/*.ts --ext .ts",
-    "lintfix": "eslint nodes/**/*.ts credentials/**/*.ts --ext .ts --fix",
+    "lint": "eslint 'nodes/**/*.ts' 'credentials/**/*.ts' --ext .ts",
+    "lintfix": "eslint 'nodes/**/*.ts' 'credentials/**/*.ts' --ext .ts --fix",
     "prepublishOnly": "npm run build",
     "test": "npm run build && node --test test/*.test.js"
   },

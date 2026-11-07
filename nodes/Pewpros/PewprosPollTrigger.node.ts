@@ -9,14 +9,17 @@ import {
 
 import { PewprosHttp } from '../../utils/PewprosHttp';
 
-// Both endpoints implement the /api/v1/contacts incremental-sync contract:
+// Every endpoint here implements the /api/v1/contacts incremental-sync contract:
 // `updated_since` is inclusive (updated_at >= since) and cursored responses are
 // ordered ascending by (updated_at, id). We advance the cursor to the highest
 // updated_at seen and remember the ids AT that timestamp to dedupe the
 // inclusive boundary on the next poll.
-const EVENT_CONFIG: Record<string, { path: string }> = {
-  waiverSignature: { path: '/api/v1/waiver-signatures' },
-  affiliateLead: { path: '/api/v1/affiliate-leads' },
+const EVENT_CONFIG: Record<string, { path: string; filterParam: string }> = {
+  waiverSignature: { path: '/api/v1/waiver-signatures', filterParam: 'signatureFilters' },
+  affiliateLead: { path: '/api/v1/affiliate-leads', filterParam: 'leadFilters' },
+  // Site-wide admin lists (pewpros #994, #992).
+  registration: { path: '/api/v1/admin/registrations', filterParam: 'registrationFilters' },
+  courseEnrollment: { path: '/api/v1/admin/courses/enrollments', filterParam: 'enrollmentFilters' },
 };
 
 const PER_PAGE = 100;
@@ -45,7 +48,7 @@ export class PewprosPollTrigger implements INodeType {
     version: 1,
     subtitle: '={{$parameter["event"]}}',
     description:
-      'Starts a workflow when new waiver signatures or affiliate leads appear (polls the Pewpros API)',
+      'Starts a workflow when new or changed waiver signatures, affiliate leads, registrations or course enrollments appear (polls the Pewpros API)',
     defaults: {
       name: 'Pewpros Poll Trigger',
     },
@@ -67,6 +70,8 @@ export class PewprosPollTrigger implements INodeType {
         default: 'waiverSignature',
         options: [
           { name: 'New Affiliate Lead', value: 'affiliateLead' },
+          { name: 'New Course Enrollment', value: 'courseEnrollment' },
+          { name: 'New Registration', value: 'registration' },
           { name: 'New Waiver Signature', value: 'waiverSignature' },
         ],
         description: 'Which record type to watch for new or updated entries',
@@ -97,6 +102,54 @@ export class PewprosPollTrigger implements INodeType {
           { displayName: 'Status', name: 'status', type: 'string', default: '' },
         ],
       },
+      {
+        displayName: 'Filters',
+        name: 'registrationFilters',
+        type: 'collection',
+        placeholder: 'Add Filter',
+        default: {},
+        displayOptions: { show: { event: ['registration'] } },
+        options: [
+          { displayName: 'Event ID', name: 'event_id', type: 'string', default: '' },
+          {
+            displayName: 'Status',
+            name: 'status',
+            type: 'options',
+            default: 'confirmed',
+            options: [
+              { name: 'Cancelled', value: 'cancelled' },
+              { name: 'Checked In', value: 'checked_in' },
+              { name: 'Confirmed', value: 'confirmed' },
+              { name: 'No Show', value: 'no_show' },
+              { name: 'To Reschedule', value: 'to_reschedule' },
+              { name: 'Waitlisted', value: 'waitlisted' },
+            ],
+          },
+        ],
+      },
+      {
+        displayName: 'Filters',
+        name: 'enrollmentFilters',
+        type: 'collection',
+        placeholder: 'Add Filter',
+        default: {},
+        displayOptions: { show: { event: ['courseEnrollment'] } },
+        options: [
+          { displayName: 'Course ID', name: 'course_id', type: 'string', default: '' },
+          {
+            displayName: 'Status',
+            name: 'status',
+            type: 'options',
+            default: 'active',
+            options: [
+              { name: 'Active', value: 'active' },
+              { name: 'Completed', value: 'completed' },
+              { name: 'Expired', value: 'expired' },
+              { name: 'Suspended', value: 'suspended' },
+            ],
+          },
+        ],
+      },
     ],
   };
 
@@ -109,8 +162,7 @@ export class PewprosPollTrigger implements INodeType {
 
     const event = this.getNodeParameter('event') as string;
     const config = EVENT_CONFIG[event];
-    const filterParam = event === 'waiverSignature' ? 'signatureFilters' : 'leadFilters';
-    const filters = this.getNodeParameter(filterParam, {}) as IDataObject;
+    const filters = this.getNodeParameter(config.filterParam, {}) as IDataObject;
     const baseQs: IDataObject = {};
     for (const [key, value] of Object.entries(filters)) {
       if (value !== undefined && value !== null && value !== '') {

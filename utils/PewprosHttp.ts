@@ -92,6 +92,13 @@ const ROUTE_PERMISSIONS: Array<{ prefix: string; key: string; label: string }> =
     label: 'Registrations and rosters',
   },
   { prefix: '/api/v1/admin/events', key: 'classes', label: 'Classes and events' },
+  { prefix: '/api/v1/admin/appointments', key: 'calendar', label: 'Calendar' },
+  { prefix: '/api/v1/admin/range', key: 'range', label: 'Range' },
+  { prefix: '/api/v1/admin/memberships', key: 'memberships', label: 'Memberships' },
+  { prefix: '/api/v1/admin/membership-levels', key: 'memberships', label: 'Memberships' },
+  { prefix: '/api/v1/admin/check-in', key: 'classes.check_in', label: 'Check-in' },
+  { prefix: '/api/v1/admin/courses', key: 'classes.manage_courses', label: 'Courses and lessons' },
+  { prefix: '/api/v1/conversations', key: 'conversations', label: 'Conversations' },
   { prefix: '/api/v1/approvals', key: 'workflows', label: 'Workflows' },
 ];
 
@@ -229,10 +236,17 @@ export class PewprosHttp {
       }
       if (Array.isArray(obj.errors)) {
         const messages = (obj.errors as IDataObject[])
-          .map((entry) => (entry && typeof entry.message === 'string' ? entry.message : ''))
+          .map((entry) => (entry && typeof entry.message === 'string' ? formatEntry(entry) : ''))
           .filter(Boolean);
         if (messages.length > 0 && messages.length === obj.errors.length) {
-          return messages.join('; ');
+          return messages.join('; ') + conflictDetail(obj);
+        }
+      }
+      if (obj.errors && typeof obj.errors === 'object' && !Array.isArray(obj.errors)) {
+        // Phoenix's fallback error view: {"errors": {"detail": "Not Found"}}.
+        const detail = (obj.errors as IDataObject).detail;
+        if (typeof detail === 'string' && Object.keys(obj.errors as IDataObject).length === 1) {
+          return detail;
         }
       }
       if (obj.errors) {
@@ -241,4 +255,40 @@ export class PewprosHttp {
     }
     return undefined;
   }
+}
+
+/**
+ * "message [code]" for an `{code, message, field?}` error entry. The field is
+ * prefixed when the message does not already name it ("has already been
+ * taken" alone does not say what was taken).
+ */
+function formatEntry(entry: IDataObject): string {
+  const message = entry.message as string;
+  const field = typeof entry.field === 'string' && entry.field ? entry.field : '';
+  const text = field && !message.startsWith(field) ? `${field} ${message}` : message;
+  const code = typeof entry.code === 'string' && entry.code ? ` [${entry.code}]` : '';
+  return `${text}${code}`;
+}
+
+/**
+ * The range API's 409s carry what the caller needs next beside `errors`:
+ * `free_lanes` with lane_busy, and the blocking staff `alerts` with
+ * lane_blocked. Fold them into the message so they are not lost.
+ */
+export function conflictDetail(body: IDataObject): string {
+  const parts: string[] = [];
+  if (Array.isArray(body.free_lanes)) {
+    const lanes = (body.free_lanes as IDataObject[]).map((lane) => {
+      const label = lane.name && lane.name !== `Lane ${lane.number}` ? ` ${lane.name}` : '';
+      return `#${lane.number ?? lane.id}${label} (id ${lane.id})`;
+    });
+    parts.push(lanes.length ? `Free lanes: ${lanes.join(', ')}` : 'No other lane is free then');
+  }
+  if (Array.isArray(body.alerts) && body.alerts.length) {
+    const alerts = (body.alerts as IDataObject[]).map((alert) =>
+      alert.severity ? `${alert.body} (${alert.severity})` : `${alert.body}`,
+    );
+    parts.push(`Alerts: ${alerts.join('; ')}`);
+  }
+  return parts.length ? `. ${parts.join('. ')}` : '';
 }

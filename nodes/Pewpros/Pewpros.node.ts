@@ -8,26 +8,48 @@ import {
   JsonObject,
   NodeApiError,
   NodeConnectionTypes,
+  NodeOperationError,
 } from 'n8n-workflow';
 
 import { PewprosHttp } from '../../utils/PewprosHttp';
+import {
+  ParamGetter,
+  RequestSpec,
+  compact,
+  pathId,
+  str,
+  toDateTime,
+  toIdArray,
+  toStringList,
+} from './helpers';
+import { appointmentProperties, buildAppointmentRequest } from './resources/appointment';
+import { buildCheckInRequest, checkInProperties } from './resources/checkIn';
+import {
+  buildMembershipLevelRequest,
+  membershipLevelProperties,
+} from './resources/membershipLevel';
+import {
+  SUBSCRIPTION_OPERATIONS,
+  buildMembershipSubscriptionRequest,
+  membershipSubscriptionProperties,
+  subscriptionOperationOptions,
+} from './resources/membershipSubscription';
+import {
+  buildRangeReservationRequest,
+  rangeReservationProperties,
+} from './resources/rangeReservation';
+import { buildRegistrationRequest, registrationProperties } from './resources/registration';
+import { buildWebhookRequest, webhookProperties } from './resources/webhook';
 
-/** Split a comma-separated id string into an array of numbers/strings. */
-function toIdArray(raw: string): Array<number | string> {
-  return raw
-    .split(',')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0)
-    .map((part) => (/^\d+$/.test(part) ? Number(part) : part));
-}
-
-/** Split a comma/space separated string into a trimmed list of strings. */
-function toStringList(raw: string): string[] {
-  return raw
-    .split(/[,\s]+/)
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
-}
+/** Resources whose requests are built in their own module. */
+const BUILDERS: Record<string, (get: ParamGetter, operation: string) => RequestSpec> = {
+  appointment: buildAppointmentRequest,
+  checkIn: buildCheckInRequest,
+  membershipLevel: buildMembershipLevelRequest,
+  rangeReservation: buildRangeReservationRequest,
+  registration: buildRegistrationRequest,
+  webhook: buildWebhookRequest,
+};
 
 /** Map of camelCase additional-field names to the API's snake_case keys. */
 const CONTACT_FIELD_MAP: Record<string, string> = {
@@ -72,17 +94,6 @@ function buildContactBody(email: string | undefined, additional: IDataObject): I
   return body;
 }
 
-/** Drop empty-string values from a collection so they are not sent. */
-function compact(input: IDataObject): IDataObject {
-  const out: IDataObject = {};
-  for (const [key, value] of Object.entries(input)) {
-    if (value !== undefined && value !== null && value !== '') {
-      out[key] = value;
-    }
-  }
-  return out;
-}
-
 export class Pewpros implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Pewpros',
@@ -92,7 +103,7 @@ export class Pewpros implements INodeType {
     version: 1,
     subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
     description:
-      'Work with Pewpros contacts, notes, tags, lists, conversations, events, courses, certifications, groups, memberships, waivers, and affiliate leads',
+      'Work with Pewpros contacts, conversations, events, registrations, courses, memberships, appointments, range lane reservations, check-in, waivers, affiliate leads and more',
     defaults: {
       name: 'Pewpros',
     },
@@ -112,7 +123,9 @@ export class Pewpros implements INodeType {
         noDataExpression: true,
         options: [
           { name: 'Affiliate Lead', value: 'affiliateLead' },
+          { name: 'Appointment', value: 'appointment' },
           { name: 'Certification', value: 'certification' },
+          { name: 'Check-In', value: 'checkIn' },
           { name: 'Contact', value: 'contact' },
           { name: 'Contact Note', value: 'contactNote' },
           { name: 'Conversation', value: 'conversation' },
@@ -121,8 +134,12 @@ export class Pewpros implements INodeType {
           { name: 'Group', value: 'group' },
           { name: 'List', value: 'list' },
           { name: 'Membership', value: 'membership' },
+          { name: 'Membership Level', value: 'membershipLevel' },
+          { name: 'Range Reservation', value: 'rangeReservation' },
+          { name: 'Registration', value: 'registration' },
           { name: 'Tag', value: 'tag' },
           { name: 'Waiver', value: 'waiver' },
+          { name: 'Webhook', value: 'webhook' },
         ],
         default: 'contact',
       },
@@ -142,9 +159,17 @@ export class Pewpros implements INodeType {
           { name: 'Create or Update', value: 'upsert', action: 'Create or update a contact' },
           { name: 'Delete', value: 'delete', action: 'Delete a contact' },
           { name: 'Get', value: 'get', action: 'Get a contact' },
-          { name: 'Get Activities', value: 'getActivities', action: 'Get activities for a contact' },
+          {
+            name: 'Get Activities',
+            value: 'getActivities',
+            action: 'Get activities for a contact',
+          },
           { name: 'Get Many', value: 'getAll', action: 'Get many contacts' },
-          { name: 'Remove From List', value: 'removeFromList', action: 'Remove a contact from lists' },
+          {
+            name: 'Remove From List',
+            value: 'removeFromList',
+            action: 'Remove a contact from lists',
+          },
           { name: 'Remove Tags', value: 'removeTags', action: 'Remove tags from a contact' },
           { name: 'Update', value: 'update', action: 'Update a contact' },
         ],
@@ -234,12 +259,24 @@ export class Pewpros implements INodeType {
         displayOptions: { show: { resource: ['contact'], operation: ['getAll'] } },
         options: [
           { displayName: 'Contact Type', name: 'contact_type', type: 'string', default: '' },
-          { displayName: 'List IDs', name: 'list_ids', type: 'string', default: '', placeholder: '1,2,3' },
+          {
+            displayName: 'List IDs',
+            name: 'list_ids',
+            type: 'string',
+            default: '',
+            placeholder: '1,2,3',
+          },
           { displayName: 'Page', name: 'page', type: 'number', default: 1 },
           { displayName: 'Per Page', name: 'per_page', type: 'number', default: 25 },
           { displayName: 'Search', name: 'search', type: 'string', default: '' },
           { displayName: 'Status', name: 'status', type: 'string', default: '' },
-          { displayName: 'Tag IDs', name: 'tag_ids', type: 'string', default: '', placeholder: '1,2,3' },
+          {
+            displayName: 'Tag IDs',
+            name: 'tag_ids',
+            type: 'string',
+            default: '',
+            placeholder: '1,2,3',
+          },
           {
             displayName: 'Updated Since',
             name: 'updated_since',
@@ -339,7 +376,13 @@ export class Pewpros implements INodeType {
         default: {},
         displayOptions: { show: { resource: ['contactNote'], operation: ['create', 'update'] } },
         options: [
-          { displayName: 'Description', name: 'description', type: 'string', typeOptions: { rows: 3 }, default: '' },
+          {
+            displayName: 'Description',
+            name: 'description',
+            type: 'string',
+            typeOptions: { rows: 3 },
+            default: '',
+          },
           { displayName: 'Parent Note ID', name: 'parent_id', type: 'string', default: '' },
           {
             displayName: 'Private',
@@ -564,7 +607,12 @@ export class Pewpros implements INodeType {
               { name: 'SMS', value: 'sms' },
             ],
           },
-          { displayName: 'Event Instance ID', name: 'event_instance_id', type: 'string', default: '' },
+          {
+            displayName: 'Event Instance ID',
+            name: 'event_instance_id',
+            type: 'string',
+            default: '',
+          },
           { displayName: 'First Name', name: 'first_name', type: 'string', default: '' },
           { displayName: 'Last Name', name: 'last_name', type: 'string', default: '' },
           { displayName: 'Phone', name: 'phone', type: 'string', default: '' },
@@ -587,11 +635,26 @@ export class Pewpros implements INodeType {
         noDataExpression: true,
         displayOptions: { show: { resource: ['course'] } },
         options: [
-          { name: 'Enroll', value: 'enroll', action: 'Enroll in a course' },
+          {
+            name: 'Enroll',
+            value: 'enroll',
+            action: 'Enroll the API token user in a course',
+            description: 'Enroll the API token user (by course slug)',
+          },
+          {
+            name: 'Enroll User',
+            value: 'enrollUser',
+            action: 'Enroll a user in a course by email',
+            description: 'Enroll anyone by email; the user is created if they do not exist',
+          },
           { name: 'Get', value: 'get', action: 'Get a course' },
-          { name: 'Get Enrollments', value: 'getEnrollments', action: 'Get the current user enrollments' },
           { name: 'Get Lessons', value: 'getLessons', action: 'Get lessons for a course' },
           { name: 'Get Many', value: 'getAll', action: 'Get many courses' },
+          {
+            name: 'Get Many Enrollments',
+            value: 'getEnrollments',
+            action: 'Get many course enrollments across the site',
+          },
         ],
         default: 'getAll',
       },
@@ -605,6 +668,87 @@ export class Pewpros implements INodeType {
           show: { resource: ['course'], operation: ['get', 'enroll', 'getLessons'] },
         },
         description: 'The slug of the course',
+      },
+      {
+        displayName: 'Course ID',
+        name: 'enrollCourseId',
+        type: 'string',
+        required: true,
+        default: '',
+        displayOptions: { show: { resource: ['course'], operation: ['enrollUser'] } },
+        description: 'The numeric ID of the course (not the slug)',
+      },
+      {
+        displayName: 'Email',
+        name: 'enrollEmail',
+        type: 'string',
+        placeholder: 'name@email.com',
+        required: true,
+        default: '',
+        displayOptions: { show: { resource: ['course'], operation: ['enrollUser'] } },
+      },
+      {
+        displayName: 'First Name',
+        name: 'enrollFirstName',
+        type: 'string',
+        required: true,
+        default: '',
+        displayOptions: { show: { resource: ['course'], operation: ['enrollUser'] } },
+        description: 'Needed when the user does not exist yet',
+      },
+      {
+        displayName: 'Last Name',
+        name: 'enrollLastName',
+        type: 'string',
+        required: true,
+        default: '',
+        displayOptions: { show: { resource: ['course'], operation: ['enrollUser'] } },
+        description: 'Needed when the user does not exist yet',
+      },
+      {
+        displayName: 'Filters',
+        name: 'enrollmentFilters',
+        type: 'collection',
+        placeholder: 'Add Filter',
+        default: {},
+        displayOptions: { show: { resource: ['course'], operation: ['getEnrollments'] } },
+        options: [
+          { displayName: 'Course ID', name: 'course_id', type: 'string', default: '' },
+          {
+            displayName: 'Page',
+            name: 'page',
+            type: 'number',
+            typeOptions: { minValue: 1 },
+            default: 1,
+          },
+          {
+            displayName: 'Per Page',
+            name: 'per_page',
+            type: 'number',
+            typeOptions: { minValue: 1, maxValue: 100 },
+            default: 25,
+          },
+          {
+            displayName: 'Status',
+            name: 'status',
+            type: 'options',
+            default: 'active',
+            options: [
+              { name: 'Active', value: 'active' },
+              { name: 'Completed', value: 'completed' },
+              { name: 'Expired', value: 'expired' },
+              { name: 'Suspended', value: 'suspended' },
+            ],
+          },
+          {
+            displayName: 'Updated Since',
+            name: 'updated_since',
+            type: 'dateTime',
+            default: '',
+            description:
+              'Only enrollments updated at or after this time. Results are then sorted oldest change first.',
+          },
+        ],
       },
 
       // ----------------------------------------------------------- Certification
@@ -650,6 +794,12 @@ export class Pewpros implements INodeType {
           { name: 'Get', value: 'get', action: 'Get a conversation' },
           { name: 'Get Many', value: 'getAll', action: 'Get many conversations' },
           { name: 'Get Messages', value: 'getMessages', action: 'Get messages in a conversation' },
+          {
+            name: 'Mark Read',
+            value: 'markRead',
+            action: 'Mark a conversation as read',
+            description: 'Mark the visitor messages in a conversation as read',
+          },
           { name: 'Reopen', value: 'reopen', action: 'Reopen a conversation' },
           {
             name: 'Send',
@@ -674,7 +824,15 @@ export class Pewpros implements INodeType {
         displayOptions: {
           show: {
             resource: ['conversation'],
-            operation: ['get', 'sendMessage', 'getMessages', 'update', 'close', 'reopen'],
+            operation: [
+              'get',
+              'sendMessage',
+              'getMessages',
+              'update',
+              'close',
+              'reopen',
+              'markRead',
+            ],
           },
         },
         description: 'The ID of the conversation',
@@ -769,6 +927,14 @@ export class Pewpros implements INodeType {
             ],
           },
         ],
+      },
+      {
+        displayName: 'Up To Message ID',
+        name: 'readBeforeId',
+        type: 'string',
+        default: '',
+        displayOptions: { show: { resource: ['conversation'], operation: ['markRead'] } },
+        description: 'Only mark messages up to and including this one. Leave empty for all.',
       },
       {
         displayName: 'Filters',
@@ -898,7 +1064,12 @@ export class Pewpros implements INodeType {
             default: '',
           },
           { displayName: 'Description', name: 'description', type: 'string', default: '' },
-          { displayName: 'Membership Level ID', name: 'membership_level_id', type: 'string', default: '' },
+          {
+            displayName: 'Membership Level ID',
+            name: 'membership_level_id',
+            type: 'string',
+            default: '',
+          },
           { displayName: 'Name', name: 'name', type: 'string', default: '' },
           {
             displayName: 'Price (Cents)',
@@ -925,7 +1096,8 @@ export class Pewpros implements INodeType {
           { name: 'Get', value: 'get', action: 'Get a membership' },
           { name: 'Get Current', value: 'getCurrent', action: 'Get the current user membership' },
           { name: 'Get Many', value: 'getAll', action: 'Get many memberships' },
-        ],
+          ...subscriptionOperationOptions,
+        ].sort((a, b) => a.name.localeCompare(b.name)),
         default: 'getCurrent',
       },
       {
@@ -937,6 +1109,7 @@ export class Pewpros implements INodeType {
         displayOptions: { show: { resource: ['membership'], operation: ['get'] } },
         description: 'The ID of the membership',
       },
+      ...membershipSubscriptionProperties,
 
       // ----------------------------------------------------------------- Waiver
       {
@@ -1046,7 +1219,9 @@ export class Pewpros implements INodeType {
         type: 'string',
         required: true,
         default: '',
-        displayOptions: { show: { resource: ['affiliateLead'], operation: ['getContactAttribution'] } },
+        displayOptions: {
+          show: { resource: ['affiliateLead'], operation: ['getContactAttribution'] },
+        },
         description: 'The ID of the contact to get the attribution rollup for',
       },
       {
@@ -1070,6 +1245,13 @@ export class Pewpros implements INodeType {
           },
         ],
       },
+
+      ...appointmentProperties,
+      ...checkInProperties,
+      ...membershipLevelProperties,
+      ...rangeReservationProperties,
+      ...registrationProperties,
+      ...webhookProperties,
     ],
   };
 
@@ -1092,8 +1274,21 @@ export class Pewpros implements INodeType {
         let path = '';
         let body: IDataObject | undefined;
         let qs: IDataObject | undefined;
+        let toItems: RequestSpec['toItems'];
+        const get: ParamGetter = (name, fallback) =>
+          fallback === undefined
+            ? this.getNodeParameter(name, i)
+            : this.getNodeParameter(name, i, fallback as never);
 
-        if (resource === 'contact') {
+        const builder =
+          BUILDERS[resource] ??
+          (resource === 'membership' && SUBSCRIPTION_OPERATIONS.includes(operation)
+            ? buildMembershipSubscriptionRequest
+            : undefined);
+
+        if (builder) {
+          ({ method, path, body, qs, toItems } = builder(get, operation));
+        } else if (resource === 'contact') {
           if (operation === 'getAll') {
             path = '/api/v1/contacts';
             qs = compact(this.getNodeParameter('filters', i, {}) as IDataObject);
@@ -1215,7 +1410,21 @@ export class Pewpros implements INodeType {
           if (operation === 'getAll') {
             path = '/api/v1/courses';
           } else if (operation === 'getEnrollments') {
-            path = '/api/v1/courses/enrollments';
+            // Site-wide list (pewpros #992); /api/v1/courses/enrollments only
+            // returns the token user's own enrollments.
+            path = '/api/v1/admin/courses/enrollments';
+            qs = compact(this.getNodeParameter('enrollmentFilters', i, {}) as IDataObject);
+            if (qs.updated_since) {
+              qs.updated_since = toDateTime(qs.updated_since);
+            }
+          } else if (operation === 'enrollUser') {
+            method = 'POST';
+            path = `/api/v1/admin/courses/${pathId(get, 'enrollCourseId', 'Course ID')}/enrollments`;
+            body = {
+              email: str(get, 'enrollEmail'),
+              first_name: str(get, 'enrollFirstName'),
+              last_name: str(get, 'enrollLastName'),
+            };
           } else if (operation === 'get') {
             path = `/api/v1/courses/${this.getNodeParameter('courseSlug', i)}`;
           } else if (operation === 'getLessons') {
@@ -1275,6 +1484,13 @@ export class Pewpros implements INodeType {
           } else if (operation === 'close' || operation === 'reopen') {
             method = 'POST';
             path = `/api/v1/conversations/${this.getNodeParameter('conversationId', i)}/${operation}`;
+          } else if (operation === 'markRead') {
+            method = 'POST';
+            path = `/api/v1/conversations/${this.getNodeParameter('conversationId', i)}/read`;
+            const beforeId = str(get, 'readBeforeId');
+            body = beforeId
+              ? { before_id: Number(pathId(get, 'readBeforeId', 'Up To Message ID')) }
+              : {};
           }
         } else if (resource === 'group') {
           if (operation === 'getAll') {
@@ -1344,9 +1560,21 @@ export class Pewpros implements INodeType {
           }
         }
 
+        if (!path) {
+          throw new NodeOperationError(
+            this.getNode(),
+            `Pewpros: unsupported operation "${operation}" for resource "${resource}"`,
+            { itemIndex: i },
+          );
+        }
+
         const responseData = await http.request(method, path, { body, qs });
 
-        if (Array.isArray(responseData)) {
+        if (toItems) {
+          for (const entry of toItems(responseData)) {
+            returnData.push({ json: entry, pairedItem: { item: i } });
+          }
+        } else if (Array.isArray(responseData)) {
           for (const entry of responseData) {
             returnData.push({ json: entry as IDataObject, pairedItem: { item: i } });
           }
