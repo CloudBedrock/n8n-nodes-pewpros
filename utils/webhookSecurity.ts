@@ -63,7 +63,7 @@ export function parseSignatureHeader(header: string | undefined | null): ParsedS
 export function verifySignature(
   secret: string,
   header: string | undefined | null,
-  rawBody: string,
+  rawBody: Buffer | string,
   nowSeconds: number,
   toleranceSeconds: number = SIGNATURE_TOLERANCE_SECONDS,
 ): SignatureResult {
@@ -77,7 +77,7 @@ export function verifySignature(
   }
 
   const expected = Buffer.from(
-    createHmac('sha256', secret).update(`${parsed.t}.${rawBody}`).digest('hex'),
+    createHmac('sha256', secret).update(`${parsed.t}.`).update(rawBody).digest('hex'),
     'utf8',
   );
 

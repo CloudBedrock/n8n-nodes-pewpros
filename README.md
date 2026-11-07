@@ -36,8 +36,9 @@ This package ships two credential types. The **Base URL** must be `https://`
 (plain `http://` is rejected so your key is never sent in cleartext; `localhost`
 is the one exception, for local development). Both credentials enforce this on
 every request they sign, including the credential test and any **HTTP Request**
-node that uses them: the key is never attached to a request bound for a
-non-loopback `http://` URL.
+node that uses them: the key is only attached to requests whose origin is the
+credential's own Base URL, so it is never sent over a non-loopback `http://`
+URL nor to any other host.
 
 ### Pewpros API (Bearer)
 
@@ -159,8 +160,10 @@ received. The node answers `401` and runs nothing when:
 **Duplicate deliveries** are dropped. Pewpros retries failed sends, and each
 event keeps its `id` (`evt_...`). The node remembers the last 1000 event ids in
 the workflow's static data; a repeated id is answered `200` without starting the
-workflow. Two copies arriving at the same instant on separate queue-mode workers
-could both run; Pewpros spaces its retries, so this does not happen in practice.
+workflow. This is best effort: two deliveries handled at the same moment by
+separate main/webhook processes can each save their own copy of the list, so a
+retry of one of those events could run again. Pewpros spaces its retries, so
+this is rare; make workflows that must never double-run idempotent on `id`.
 
 ## Poll Trigger
 

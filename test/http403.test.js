@@ -51,6 +51,23 @@ test('unmapped 403 gives a generic role message', async () => {
   );
 });
 
+test('admin-role 403 on a mapped path does not blame a permission', async () => {
+  stub(403, { errors: [{ message: 'Forbidden' }] });
+  await assert.rejects(
+    http.request('POST', '/api/v1/webhooks/register', { body: {} }),
+    (error) =>
+      !error.message.includes('setup.integrations') && error.message.includes('not allowed'),
+  );
+});
+
+test('every message in an errors array is kept', async () => {
+  stub(422, { errors: [{ message: 'email is invalid' }, { message: 'name is required' }] });
+  await assert.rejects(
+    http.request('POST', '/api/v1/contacts', { body: {} }),
+    /email is invalid; name is required/,
+  );
+});
+
 test('404 keeps the HTTP 404 prefix the trigger relies on', async () => {
   stub(404, { errors: [{ message: 'Not found' }] });
   await assert.rejects(http.request('GET', '/api/v1/webhooks/9'), /^Error: HTTP 404: Not found$/);

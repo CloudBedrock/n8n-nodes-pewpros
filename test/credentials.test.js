@@ -49,6 +49,37 @@ for (const c of cases) {
     );
   });
 
+  test(`${c.name}: refuses an https URL on another host`, async () => {
+    await assert.rejects(
+      c.cred.authenticate(c.data('https://dev.pewpros.com'), { url: 'https://attacker.example/x' }),
+      /only signs requests to its Base URL/,
+    );
+  });
+
+  test(`${c.name}: refuses the legacy uri option pointed at an http:// host`, async () => {
+    await assert.rejects(
+      c.cred.authenticate(c.data('https://dev.pewpros.com'), { uri: 'http://evil.example.com/x' }),
+      /insecure http:/,
+    );
+  });
+
+  test(`${c.name}: refuses a protocol-relative url to another host`, async () => {
+    await assert.rejects(
+      c.cred.authenticate(c.data('https://dev.pewpros.com'), {
+        baseURL: 'https://dev.pewpros.com',
+        url: '//evil.example.com/x',
+      }),
+      /only signs requests to its Base URL/,
+    );
+  });
+
+  test(`${c.name}: allows an absolute https URL on its own Base URL`, async () => {
+    const out = await c.cred.authenticate(c.data('https://dev.pewpros.com'), {
+      url: 'https://dev.pewpros.com/api/v1/contacts',
+    });
+    assert.equal(out.headers[c.header], c.value);
+  });
+
   test(`${c.name}: allows http://localhost`, async () => {
     const out = await c.cred.authenticate(c.data('http://localhost:4000'), {
       url: 'http://localhost:4000/api/v1/x',

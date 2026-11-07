@@ -42,6 +42,17 @@ test('rejects a re-serialised body (exact bytes only)', () => {
   assert.equal(verifySignature(SECRET, header, reserialised, NOW), 'mismatch');
 });
 
+test('verifies over raw bytes, including bytes that are not valid UTF-8', () => {
+  const raw = Buffer.concat([
+    Buffer.from('{"id":"evt_x","n":"'),
+    Buffer.from([0xff, 0xfe]),
+    Buffer.from('"}'),
+  ]);
+  const header = `t=${NOW},v1=${createHmac('sha256', SECRET).update(`${NOW}.`).update(raw).digest('hex')}`;
+  assert.equal(verifySignature(SECRET, header, raw, NOW), 'ok');
+  assert.equal(verifySignature(SECRET, header, raw.toString(), NOW), 'mismatch');
+});
+
 test('rejects a timestamp older than 300 seconds', () => {
   const t = NOW - 301;
   const header = `t=${t},v1=${sign(SECRET, t, BODY)}`;

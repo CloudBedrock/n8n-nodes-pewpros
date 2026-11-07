@@ -22,29 +22,61 @@ export function assertSecureBaseUrl(baseUrl: string): void {
   }
 }
 
-const ABSOLUTE_URL = /^[a-z][a-z0-9+.-]*:\/\//i;
+function targetString(value: unknown): string | undefined {
+  if (typeof value === 'string' && value !== '') {
+    return value;
+  }
+  if (value instanceof URL) {
+    return value.href;
+  }
+  if (
+    value &&
+    typeof value === 'object' &&
+    typeof (value as { href?: unknown }).href === 'string'
+  ) {
+    return (value as { href: string }).href;
+  }
+  return undefined;
+}
 
 /**
- * Guard for a credential's `authenticate`: checks the stored Base URL and the
- * URL the request will actually go to (an absolute `url` wins over `baseURL`,
- * as in axios), so a secret is never attached to a cleartext request, whether
- * from the credential test or an HTTP Request node pointed elsewhere.
+ * Guard for a credential's `authenticate`. Resolves the URL the request will
+ * actually go to (`url`, or the legacy `uri` the HTTP Request node sends,
+ * resolved against `baseURL` the way axios does, protocol-relative included)
+ * and refuses to attach the secret unless that target is https (loopback
+ * excepted) AND has the same origin as the credential's own Base URL. A user
+ * who may use a shared credential therefore cannot send it to another host.
  */
 export function assertSecureRequestTarget(
-  requestOptions: Pick<IHttpRequestOptions, 'url' | 'baseURL'>,
-  credentialBaseUrl?: string,
+  requestOptions: Pick<IHttpRequestOptions, 'url' | 'baseURL'> & { uri?: unknown },
+  credentialBaseUrl: string | undefined,
 ): void {
-  if (credentialBaseUrl) {
-    assertSecureBaseUrl(credentialBaseUrl);
+  if (!credentialBaseUrl) {
+    throw new Error('Pewpros: the credential has no Base URL; refusing to attach credentials.');
+  }
+  assertSecureBaseUrl(credentialBaseUrl);
+  const allowedOrigin = new URL(credentialBaseUrl).origin;
+
+  const baseURL = requestOptions.baseURL;
+  const base =
+    typeof baseURL === 'string' && baseURL !== '' && !baseURL.startsWith('=')
+      ? baseURL
+      : credentialBaseUrl;
+  const raw = targetString(requestOptions.url) ?? targetString(requestOptions.uri);
+
+  let target: URL;
+  try {
+    target = raw ? new URL(raw, base) : new URL(base);
+  } catch {
+    throw new Error('Pewpros: cannot determine the request URL; refusing to attach credentials.');
   }
 
-  const { url, baseURL } = requestOptions;
-  if (typeof url === 'string' && ABSOLUTE_URL.test(url)) {
-    assertSecureBaseUrl(url);
-  } else if (typeof baseURL === 'string' && baseURL !== '' && !baseURL.startsWith('=')) {
-    assertSecureBaseUrl(baseURL);
-  } else if (!credentialBaseUrl) {
-    throw new Error('Pewpros: cannot determine the request URL; refusing to attach credentials.');
+  assertSecureBaseUrl(target.href);
+  if (target.origin !== allowedOrigin) {
+    throw new Error(
+      `Pewpros: refusing to send credentials to "${target.origin}"; ` +
+        `this credential only signs requests to its Base URL (${allowedOrigin}).`,
+    );
   }
 }
 
@@ -66,10 +98,13 @@ const ROUTE_PERMISSIONS: Array<{ prefix: string; key: string; label: string }> =
 export function forbiddenMessage(method: string, path: string, serverDetail?: string): string {
   const route = `${method} ${path}`;
   const server = serverDetail ? ` (server: ${serverDetail})` : '';
+  // RequireCapability answers with this exact text; the plain admin-role gate
+  // answers "Forbidden" on the same routes, so only name a permission here.
+  const capabilityDenial = serverDetail === 'Your role does not have access';
   const match = ROUTE_PERMISSIONS.find(
     (entry) => path === entry.prefix || path.startsWith(`${entry.prefix}/`),
   );
-  if (match) {
+  if (match && capabilityDenial) {
     return (
       `HTTP 403: the API token's role lacks the "${match.label}" (${match.key}) permission ` +
       `needed for ${route}. Grant it to the role in Pewpros, or use a token from a role that has it.${server}`
@@ -193,9 +228,11 @@ export class PewprosHttp {
         return obj.error;
       }
       if (Array.isArray(obj.errors)) {
-        const first = obj.errors[0] as IDataObject | undefined;
-        if (first && typeof first.message === 'string') {
-          return first.message;
+        const messages = (obj.errors as IDataObject[])
+          .map((entry) => (entry && typeof entry.message === 'string' ? entry.message : ''))
+          .filter(Boolean);
+        if (messages.length > 0 && messages.length === obj.errors.length) {
+          return messages.join('; ');
         }
       }
       if (obj.errors) {

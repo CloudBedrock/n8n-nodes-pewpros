@@ -177,12 +177,7 @@ export class PewprosTrigger implements INodeType {
       return reject('missing signature');
     }
 
-    const result = verifySignature(
-      secret,
-      signatureHeader,
-      rawBody.toString(),
-      Math.floor(Date.now() / 1000),
-    );
+    const result = verifySignature(secret, signatureHeader, rawBody, Math.floor(Date.now() / 1000));
     if (result !== 'ok') {
       return reject(
         result === 'stale'
