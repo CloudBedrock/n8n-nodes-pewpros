@@ -1,5 +1,3 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
-
 import {
   IDataObject,
   IHookFunctions,
@@ -10,6 +8,7 @@ import {
 } from 'n8n-workflow';
 
 import { PewprosHttp } from '../../utils/PewprosHttp';
+import { rememberEventId, SeenEventState, verifySignature } from '../../utils/webhookSecurity';
 
 // The registerable outbound-webhook topics (docs/funnels + Webhooks.topics/0).
 const EVENT_TOPICS = [
@@ -24,9 +23,10 @@ const EVENT_TOPICS = [
   'membership.created',
   'membership.updated',
   'membership.cancelled',
+  'waiver.signed',
 ];
 
-interface SubscriptionState {
+interface SubscriptionState extends SeenEventState {
   webhookId?: number;
   secret?: string;
 }
@@ -79,14 +79,6 @@ export class PewprosTrigger implements INodeType {
         default: [],
         description: 'Event topics that should start this workflow',
         options: EVENT_TOPICS.map((topic) => ({ name: topic, value: topic })),
-      },
-      {
-        displayName: 'Verify Signature',
-        name: 'verifySignature',
-        type: 'boolean',
-        default: true,
-        description:
-          'Whether to reject deliveries whose Pewpros-Signature HMAC does not match the subscription secret. Leave on.',
       },
     ],
   };
@@ -157,44 +149,55 @@ export class PewprosTrigger implements INodeType {
     },
   };
 
+  // Every delivery is verified; there is no way to turn this off.
   async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
     const req = this.getRequestObject();
+    const res = this.getResponseObject();
     const body = this.getBodyData();
-    const verify = this.getNodeParameter('verifySignature', true) as boolean;
+    const state = this.getWorkflowStaticData('node') as SubscriptionState;
 
-    if (verify) {
-      const state = this.getWorkflowStaticData('node') as SubscriptionState;
-      const secret = state.secret;
-      const signatureHeader = this.getHeaderData()['pewpros-signature'] as string | undefined;
+    const reject = (reason: string): IWebhookResponseData => {
+      res.status(401).json({ error: reason });
+      return { noWebhookResponse: true };
+    };
 
-      // Sign over the EXACT received bytes, not a re-serialised body.
-      const rawBody =
-        (req as unknown as { rawBody?: Buffer | string }).rawBody?.toString() ??
-        JSON.stringify(body);
+    // Sign over the EXACT received bytes. Never rebuild the body to verify it.
+    const rawBody = (req as unknown as { rawBody?: Buffer | string }).rawBody;
+    if (rawBody === undefined || rawBody === null) {
+      return reject('raw body unavailable');
+    }
 
-      if (!secret || !signatureHeader || !verifySignature(secret, signatureHeader, rawBody)) {
-        const res = this.getResponseObject();
-        res.status(401).json({ error: 'invalid signature' });
-        return { noWebhookResponse: true };
-      }
+    const secret = state.secret;
+    if (!secret) {
+      return reject('no subscription secret');
+    }
+
+    const signatureHeader = this.getHeaderData()['pewpros-signature'] as string | undefined;
+    if (!signatureHeader) {
+      return reject('missing signature');
+    }
+
+    const result = verifySignature(secret, signatureHeader, rawBody, Math.floor(Date.now() / 1000));
+    if (result !== 'ok') {
+      return reject(
+        result === 'stale'
+          ? 'stale signature'
+          : result === 'malformed'
+            ? 'malformed signature'
+            : 'invalid signature',
+      );
+    }
+
+    // Pewpros retries failed sends; each event keeps its `evt_...` id. A repeat
+    // is acknowledged so the sender stops retrying, but runs nothing.
+    const eventId = (body as IDataObject).id;
+    if (typeof eventId === 'string' && eventId !== '' && !rememberEventId(state, eventId)) {
+      res.status(200).json({ received: true, duplicate: true });
+      return { noWebhookResponse: true };
     }
 
     return {
       workflowData: [this.helpers.returnJsonArray(body as IDataObject)],
     };
   }
-}
-
-// Pewpros-Signature: t=<unix>,v1=<hex> where v1 = HMAC_SHA256(secret, "<t>.<rawBody>").
-function verifySignature(secret: string, header: string, rawBody: string): boolean {
-  const match = /t=(\d+),v1=([0-9a-f]+)/.exec(header);
-  if (!match) {
-    return false;
-  }
-  const [, timestamp, provided] = match;
-  const expected = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
-
-  const a = Buffer.from(provided, 'utf8');
-  const b = Buffer.from(expected, 'utf8');
-  return a.length === b.length && timingSafeEqual(a, b);
 }
