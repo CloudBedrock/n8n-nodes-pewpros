@@ -106,6 +106,19 @@ test('appointment update splits guest emails into an array', () => {
   assert.deepEqual(spec.body, { guest_emails: ['a@x.com', 'b@x.com'], scope: 'following' });
 });
 
+test('appointment update with an empty guest emails field clears the list', () => {
+  const spec = buildAppointmentRequest(
+    params({ appointmentId: '44', appointmentUpdateFields: { guest_emails: '' } }),
+    'update',
+  );
+  assert.deepEqual(spec.body, { guest_emails: [] });
+  const untouched = buildAppointmentRequest(
+    params({ appointmentId: '44', appointmentUpdateFields: { notes: 'x' } }),
+    'update',
+  );
+  assert.equal('guest_emails' in untouched.body, false);
+});
+
 test('appointment cancel keeps an explicit notify_customer false', () => {
   const spec = buildAppointmentRequest(
     params({ appointmentId: '44', appointmentCancelFields: { notify_customer: false } }),

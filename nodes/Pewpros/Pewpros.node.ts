@@ -17,6 +17,7 @@ import {
   RequestSpec,
   compact,
   pathId,
+  segment,
   str,
   toDateTime,
   toIdArray,
@@ -1293,9 +1294,9 @@ export class Pewpros implements INodeType {
             path = '/api/v1/contacts';
             qs = compact(this.getNodeParameter('filters', i, {}) as IDataObject);
           } else if (operation === 'get') {
-            path = `/api/v1/contacts/${this.getNodeParameter('contactId', i)}`;
+            path = `/api/v1/contacts/${segment(this.getNodeParameter('contactId', i), 'contactId')}`;
           } else if (operation === 'getActivities') {
-            path = `/api/v1/contacts/${this.getNodeParameter('contactId', i)}/activities`;
+            path = `/api/v1/contacts/${segment(this.getNodeParameter('contactId', i), 'contactId')}/activities`;
             qs = compact(this.getNodeParameter('activityFilters', i, {}) as IDataObject);
           } else if (operation === 'create' || operation === 'upsert') {
             method = 'POST';
@@ -1306,21 +1307,21 @@ export class Pewpros implements INodeType {
             );
           } else if (operation === 'update') {
             method = 'PUT';
-            path = `/api/v1/contacts/${this.getNodeParameter('contactId', i)}`;
+            path = `/api/v1/contacts/${segment(this.getNodeParameter('contactId', i), 'contactId')}`;
             body = buildContactBody(
               undefined,
               this.getNodeParameter('additionalFields', i, {}) as IDataObject,
             );
           } else if (operation === 'delete') {
             method = 'DELETE';
-            path = `/api/v1/contacts/${this.getNodeParameter('contactId', i)}`;
+            path = `/api/v1/contacts/${segment(this.getNodeParameter('contactId', i), 'contactId')}`;
           } else if (operation === 'addTags' || operation === 'removeTags') {
             method = operation === 'addTags' ? 'POST' : 'DELETE';
-            path = `/api/v1/contacts/${this.getNodeParameter('contactId', i)}/tags`;
+            path = `/api/v1/contacts/${segment(this.getNodeParameter('contactId', i), 'contactId')}/tags`;
             body = { tag_ids: toIdArray(this.getNodeParameter('tagIds', i) as string) };
           } else if (operation === 'addToList' || operation === 'removeFromList') {
             method = operation === 'addToList' ? 'POST' : 'DELETE';
-            path = `/api/v1/contacts/${this.getNodeParameter('contactId', i)}/lists`;
+            path = `/api/v1/contacts/${segment(this.getNodeParameter('contactId', i), 'contactId')}/lists`;
             body = { list_ids: toIdArray(this.getNodeParameter('listIds', i) as string) };
           } else if (operation === 'bulkAddTags') {
             method = 'POST';
@@ -1331,7 +1332,7 @@ export class Pewpros implements INodeType {
             };
           }
         } else if (resource === 'contactNote') {
-          const noteContactId = this.getNodeParameter('noteContactId', i);
+          const noteContactId = segment(this.getNodeParameter('noteContactId', i), 'noteContactId');
           if (operation === 'getAll') {
             path = `/api/v1/contacts/${noteContactId}/notes`;
           } else if (operation === 'create') {
@@ -1340,11 +1341,11 @@ export class Pewpros implements INodeType {
             body = compact(this.getNodeParameter('noteFields', i, {}) as IDataObject);
           } else if (operation === 'update') {
             method = 'PUT';
-            path = `/api/v1/contacts/${noteContactId}/notes/${this.getNodeParameter('noteId', i)}`;
+            path = `/api/v1/contacts/${noteContactId}/notes/${segment(this.getNodeParameter('noteId', i), 'noteId')}`;
             body = compact(this.getNodeParameter('noteFields', i, {}) as IDataObject);
           } else if (operation === 'delete') {
             method = 'DELETE';
-            path = `/api/v1/contacts/${noteContactId}/notes/${this.getNodeParameter('noteId', i)}`;
+            path = `/api/v1/contacts/${noteContactId}/notes/${segment(this.getNodeParameter('noteId', i), 'noteId')}`;
           }
         } else if (resource === 'tag') {
           if (operation === 'getAll') {
@@ -1358,11 +1359,11 @@ export class Pewpros implements INodeType {
             };
           } else if (operation === 'update') {
             method = 'PUT';
-            path = `/api/v1/tags/${this.getNodeParameter('tagId', i)}`;
+            path = `/api/v1/tags/${segment(this.getNodeParameter('tagId', i), 'tagId')}`;
             body = compact(this.getNodeParameter('updateFields', i, {}) as IDataObject);
           } else if (operation === 'delete') {
             method = 'DELETE';
-            path = `/api/v1/tags/${this.getNodeParameter('tagId', i)}`;
+            path = `/api/v1/tags/${segment(this.getNodeParameter('tagId', i), 'tagId')}`;
           }
         } else if (resource === 'list') {
           if (operation === 'getAll') {
@@ -1376,11 +1377,11 @@ export class Pewpros implements INodeType {
             };
           } else if (operation === 'update') {
             method = 'PUT';
-            path = `/api/v1/lists/${this.getNodeParameter('listId', i)}`;
+            path = `/api/v1/lists/${segment(this.getNodeParameter('listId', i), 'listId')}`;
             body = compact(this.getNodeParameter('listFields', i, {}) as IDataObject);
           } else if (operation === 'delete') {
             method = 'DELETE';
-            path = `/api/v1/lists/${this.getNodeParameter('listId', i)}`;
+            path = `/api/v1/lists/${segment(this.getNodeParameter('listId', i), 'listId')}`;
           }
         } else if (resource === 'event') {
           if (operation === 'getAll') {
@@ -1388,9 +1389,9 @@ export class Pewpros implements INodeType {
           } else if (operation === 'getUpcomingSessions') {
             path = '/api/v1/events/upcoming-sessions';
           } else if (operation === 'get') {
-            path = `/api/v1/events/${this.getNodeParameter('eventSlug', i)}`;
+            path = `/api/v1/events/${segment(this.getNodeParameter('eventSlug', i), 'eventSlug')}`;
           } else if (operation === 'getRegistrations') {
-            path = `/api/v1/admin/events/${this.getNodeParameter('eventId', i)}/attendees`;
+            path = `/api/v1/admin/events/${segment(this.getNodeParameter('eventId', i), 'eventId')}/attendees`;
             const search = this.getNodeParameter('registrationSearch', i, '') as string;
             if (search) {
               qs = { search };
@@ -1426,29 +1427,29 @@ export class Pewpros implements INodeType {
               last_name: str(get, 'enrollLastName'),
             };
           } else if (operation === 'get') {
-            path = `/api/v1/courses/${this.getNodeParameter('courseSlug', i)}`;
+            path = `/api/v1/courses/${segment(this.getNodeParameter('courseSlug', i), 'courseSlug')}`;
           } else if (operation === 'getLessons') {
-            path = `/api/v1/courses/${this.getNodeParameter('courseSlug', i)}/lessons`;
+            path = `/api/v1/courses/${segment(this.getNodeParameter('courseSlug', i), 'courseSlug')}/lessons`;
           } else if (operation === 'enroll') {
             method = 'POST';
-            path = `/api/v1/courses/${this.getNodeParameter('courseSlug', i)}/enroll`;
+            path = `/api/v1/courses/${segment(this.getNodeParameter('courseSlug', i), 'courseSlug')}/enroll`;
           }
         } else if (resource === 'certification') {
           if (operation === 'getAll') {
             path = '/api/v1/certifications';
           } else if (operation === 'get') {
-            path = `/api/v1/certifications/${this.getNodeParameter('certificationId', i)}`;
+            path = `/api/v1/certifications/${segment(this.getNodeParameter('certificationId', i), 'certificationId')}`;
           } else if (operation === 'getDownload') {
-            path = `/api/v1/certifications/${this.getNodeParameter('certificationId', i)}/download`;
+            path = `/api/v1/certifications/${segment(this.getNodeParameter('certificationId', i), 'certificationId')}/download`;
           }
         } else if (resource === 'conversation') {
           if (operation === 'getAll') {
             path = '/api/v1/conversations';
             qs = compact(this.getNodeParameter('conversationFilters', i, {}) as IDataObject);
           } else if (operation === 'get') {
-            path = `/api/v1/conversations/${this.getNodeParameter('conversationId', i)}`;
+            path = `/api/v1/conversations/${segment(this.getNodeParameter('conversationId', i), 'conversationId')}`;
           } else if (operation === 'getMessages') {
-            path = `/api/v1/conversations/${this.getNodeParameter('conversationId', i)}/messages`;
+            path = `/api/v1/conversations/${segment(this.getNodeParameter('conversationId', i), 'conversationId')}/messages`;
             qs = compact(this.getNodeParameter('messageFilters', i, {}) as IDataObject);
           } else if (operation === 'create') {
             method = 'POST';
@@ -1463,7 +1464,7 @@ export class Pewpros implements INodeType {
             };
           } else if (operation === 'sendMessage') {
             method = 'POST';
-            path = `/api/v1/conversations/${this.getNodeParameter('conversationId', i)}/messages`;
+            path = `/api/v1/conversations/${segment(this.getNodeParameter('conversationId', i), 'conversationId')}/messages`;
             body = { message: this.getNodeParameter('message', i) };
           } else if (operation === 'send') {
             method = 'POST';
@@ -1479,14 +1480,14 @@ export class Pewpros implements INodeType {
             };
           } else if (operation === 'update') {
             method = 'PUT';
-            path = `/api/v1/conversations/${this.getNodeParameter('conversationId', i)}`;
+            path = `/api/v1/conversations/${segment(this.getNodeParameter('conversationId', i), 'conversationId')}`;
             body = compact(this.getNodeParameter('conversationUpdateFields', i, {}) as IDataObject);
           } else if (operation === 'close' || operation === 'reopen') {
             method = 'POST';
-            path = `/api/v1/conversations/${this.getNodeParameter('conversationId', i)}/${operation}`;
+            path = `/api/v1/conversations/${segment(this.getNodeParameter('conversationId', i), 'conversationId')}/${operation}`;
           } else if (operation === 'markRead') {
             method = 'POST';
-            path = `/api/v1/conversations/${this.getNodeParameter('conversationId', i)}/read`;
+            path = `/api/v1/conversations/${segment(this.getNodeParameter('conversationId', i), 'conversationId')}/read`;
             const beforeId = str(get, 'readBeforeId');
             body = beforeId
               ? { before_id: Number(pathId(get, 'readBeforeId', 'Up To Message ID')) }
@@ -1499,9 +1500,9 @@ export class Pewpros implements INodeType {
               qs = { browse: 'true' };
             }
           } else if (operation === 'get') {
-            path = `/api/v1/groups/${this.getNodeParameter('groupId', i)}`;
+            path = `/api/v1/groups/${segment(this.getNodeParameter('groupId', i), 'groupId')}`;
           } else if (operation === 'getMembers') {
-            path = `/api/v1/groups/${this.getNodeParameter('groupId', i)}/members`;
+            path = `/api/v1/groups/${segment(this.getNodeParameter('groupId', i), 'groupId')}/members`;
           } else if (operation === 'create') {
             method = 'POST';
             path = '/api/v1/groups';
@@ -1514,14 +1515,14 @@ export class Pewpros implements INodeType {
             };
           } else if (operation === 'update') {
             method = 'PATCH';
-            path = `/api/v1/groups/${this.getNodeParameter('groupId', i)}`;
+            path = `/api/v1/groups/${segment(this.getNodeParameter('groupId', i), 'groupId')}`;
             body = { group: compact(this.getNodeParameter('groupFields', i, {}) as IDataObject) };
           } else if (operation === 'delete') {
             method = 'DELETE';
-            path = `/api/v1/groups/${this.getNodeParameter('groupId', i)}`;
+            path = `/api/v1/groups/${segment(this.getNodeParameter('groupId', i), 'groupId')}`;
           } else if (operation === 'invite') {
             method = 'POST';
-            path = `/api/v1/groups/${this.getNodeParameter('groupId', i)}/invitations`;
+            path = `/api/v1/groups/${segment(this.getNodeParameter('groupId', i), 'groupId')}/invitations`;
             body = {
               invitation_type: 'email',
               emails: toStringList(this.getNodeParameter('inviteEmails', i) as string),
@@ -1533,20 +1534,20 @@ export class Pewpros implements INodeType {
           } else if (operation === 'getAll') {
             path = '/api/v1/memberships';
           } else if (operation === 'get') {
-            path = `/api/v1/memberships/${this.getNodeParameter('membershipId', i)}`;
+            path = `/api/v1/memberships/${segment(this.getNodeParameter('membershipId', i), 'membershipId')}`;
           }
         } else if (resource === 'waiver') {
           if (operation === 'getAll') {
             path = '/api/v1/waivers';
           } else if (operation === 'get') {
-            path = `/api/v1/waivers/${this.getNodeParameter('waiverId', i)}`;
+            path = `/api/v1/waivers/${segment(this.getNodeParameter('waiverId', i), 'waiverId')}`;
           } else if (operation === 'getAllSignatures') {
             path = '/api/v1/waiver-signatures';
             qs = compact(this.getNodeParameter('signatureFilters', i, {}) as IDataObject);
           } else if (operation === 'getSignature') {
-            path = `/api/v1/waiver-signatures/${this.getNodeParameter('signatureId', i)}`;
+            path = `/api/v1/waiver-signatures/${segment(this.getNodeParameter('signatureId', i), 'signatureId')}`;
           } else if (operation === 'getContactStatus') {
-            path = `/api/v1/contacts/${this.getNodeParameter('waiverContactId', i)}/waiver-status`;
+            path = `/api/v1/contacts/${segment(this.getNodeParameter('waiverContactId', i), 'waiverContactId')}/waiver-status`;
             qs = { waiver_id: this.getNodeParameter('waiverId', i) };
           }
         } else if (resource === 'affiliateLead') {
@@ -1554,9 +1555,9 @@ export class Pewpros implements INodeType {
             path = '/api/v1/affiliate-leads';
             qs = compact(this.getNodeParameter('leadFilters', i, {}) as IDataObject);
           } else if (operation === 'get') {
-            path = `/api/v1/affiliate-leads/${this.getNodeParameter('affiliateLeadId', i)}`;
+            path = `/api/v1/affiliate-leads/${segment(this.getNodeParameter('affiliateLeadId', i), 'affiliateLeadId')}`;
           } else if (operation === 'getContactAttribution') {
-            path = `/api/v1/contacts/${this.getNodeParameter('attributionContactId', i)}/affiliate-attribution`;
+            path = `/api/v1/contacts/${segment(this.getNodeParameter('attributionContactId', i), 'attributionContactId')}/affiliate-attribution`;
           }
         }
 

@@ -125,8 +125,15 @@ contact X signed waiver Y?"; `Get Contact Attribution` returns a contact's
 affiliate lead handoff rollup.
 
 Registration `Get Many` and Course `Get Many Enrollments` cover the whole site
-and take the same `Updated Since` filter. (Before this release, Get Enrollments
-returned only the API token user's own enrollments.) **Enroll User** enrolls
+and take the same `Updated Since` filter.
+
+> **Breaking change:** Course → Get Many Enrollments keeps its old operation
+> value (`getEnrollments`) but now lists **every enrollment on the site** and
+> needs the `classes.manage_courses` permission. It used to return only the API
+> token user's own enrollments. Saved workflows that use it will see different
+> data, or a 403 if the token's role lacks the permission.
+
+**Enroll User** enrolls
 anyone by email and creates the user if needed; it takes the numeric course ID,
 not the slug. Re-enrolling returns the existing enrollment.
 

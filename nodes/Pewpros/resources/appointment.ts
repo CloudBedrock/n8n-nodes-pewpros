@@ -462,9 +462,12 @@ export function buildAppointmentRequest(get: ParamGetter, operation: string): Re
     case 'get':
       return { method: 'GET', path: `${BASE}/${id}` };
     case 'update': {
-      const fields = compact(get('appointmentUpdateFields', {}) as IDataObject);
-      if (typeof fields.guest_emails === 'string') {
-        fields.guest_emails = toStringList(fields.guest_emails);
+      const raw = get('appointmentUpdateFields', {}) as IDataObject;
+      const fields = compact(raw);
+      // The server replaces the list, so an added-but-empty Guest Emails
+      // field clears it (compact() would otherwise drop the empty string).
+      if ('guest_emails' in raw) {
+        fields.guest_emails = toStringList(String(raw.guest_emails ?? ''));
       }
       return { method: 'PATCH', path: `${BASE}/${id}`, body: fields };
     }

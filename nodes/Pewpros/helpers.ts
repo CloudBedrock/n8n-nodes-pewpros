@@ -66,6 +66,22 @@ export function pathId(get: ParamGetter, name: string, label: string): string {
 }
 
 /**
+ * Make a parameter safe to place in a URL path as one segment. Node parameters
+ * are often expressions fed by upstream data, so a value like
+ * `../admin/appointments/5/confirm?` must not be able to steer the request to
+ * another route under the stored credential. Dot segments are refused and
+ * everything else is percent-encoded (`/`, `?`, `#` and `%` included, so an
+ * encoded `%2e%2e` cannot become a dot segment either).
+ */
+export function segment(value: unknown, label = 'ID'): string {
+  const text = value === undefined || value === null ? '' : String(value).trim();
+  if (text === '' || text === '.' || text === '..') {
+    throw new Error(`Pewpros: ${label} is required and cannot be "${text}".`);
+  }
+  return encodeURIComponent(text);
+}
+
+/**
  * Convert numeric-looking strings for the given keys to numbers, so the API
  * receives JSON integers. Some endpoints reject `"5"` where they expect `5`.
  */
