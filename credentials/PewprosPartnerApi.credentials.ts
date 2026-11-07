@@ -1,9 +1,12 @@
 import {
-  IAuthenticateGeneric,
+  ICredentialDataDecryptedObject,
   ICredentialTestRequest,
   ICredentialType,
+  IHttpRequestOptions,
   INodeProperties,
 } from 'n8n-workflow';
+
+import { assertSecureRequestTarget } from '../utils/PewprosHttp';
 
 /**
  * Secret server-to-server partner credential (`sk_partner_...`) for the
@@ -39,14 +42,21 @@ export class PewprosPartnerApi implements ICredentialType {
     },
   ];
 
-  authenticate: IAuthenticateGeneric = {
-    type: 'generic',
-    properties: {
+  // Refuses to attach the key to any request that is not https (loopback
+  // excepted): the credential test and HTTP Request nodes alike.
+  async authenticate(
+    credentials: ICredentialDataDecryptedObject,
+    requestOptions: IHttpRequestOptions,
+  ): Promise<IHttpRequestOptions> {
+    assertSecureRequestTarget(requestOptions, credentials.baseUrl as string | undefined);
+    return {
+      ...requestOptions,
       headers: {
-        'X-Partner-Key': '={{$credentials.partnerKey}}',
+        ...(requestOptions.headers ?? {}),
+        'X-Partner-Key': credentials.partnerKey as string,
       },
-    },
-  };
+    };
+  }
 
   test: ICredentialTestRequest = {
     request: {

@@ -7,7 +7,8 @@ Pewpros is a multi-tenant platform for contacts, tags, lists, events, courses,
 certifications, conversations, waivers, and affiliate leads. This package
 provides an **action node** for the REST API, a **trigger node** that starts
 workflows from Pewpros outbound webhooks, and a **poll trigger node** for
-record types without webhook topics (waiver signatures, affiliate leads).
+record types without webhook topics (affiliate leads, plus waiver signatures for
+existing workflows).
 
 [n8n](https://n8n.io) is a [fair-code licensed](https://docs.n8n.io/reference/license/)
 workflow automation platform.
@@ -33,7 +34,10 @@ and enter `n8n-nodes-pewpros`.
 
 This package ships two credential types. The **Base URL** must be `https://`
 (plain `http://` is rejected so your key is never sent in cleartext; `localhost`
-is the one exception, for local development).
+is the one exception, for local development). Both credentials enforce this on
+every request they sign, including the credential test and any **HTTP Request**
+node that uses them: the key is never attached to a request bound for a
+non-loopback `http://` URL.
 
 ### Pewpros API (Bearer)
 
@@ -62,6 +66,23 @@ to call partner endpoints.
 - **Base URL** — same format as above.
 
 Verified against `GET /api/v1/partner/whoami`.
+
+### Permissions
+
+Every action and both triggers need a Pewpros user with an admin role (`owner`,
+`instructor`, `staff`, or `super_admin`). Some routes also check the role's
+permissions (Pewpros role capabilities):
+
+| Feature | Permission the token's role needs |
+| --- | --- |
+| **Pewpros Trigger** (registers webhooks) | Setup → Integrations and credentials (`setup.integrations`) |
+| Event → Get Registrations | Classes and events (`classes`) |
+| Event → Register Attendee | Classes and events → Registrations and rosters (`classes.registrations`) |
+| All other operations, **Pewpros Poll Trigger** | admin role only |
+
+When the role lacks a permission, the node fails with an error naming it, e.g.
+`HTTP 403: the API token's role lacks the "Integrations and credentials"
+(setup.integrations) permission needed for POST /api/v1/webhooks/register`.
 
 ## Operations
 
@@ -121,21 +142,36 @@ Select one or more **Events**:
 `contact.created`, `contact.updated`, `registration.created`,
 `registration.cancelled`, `enrollment.created`, `order.paid`,
 `conversation.created`, `message.received`, `membership.created`,
-`membership.updated`, `membership.cancelled`.
+`membership.updated`, `membership.cancelled`, `waiver.signed`.
 
-**Signature verification** is on by default: each delivery carries
-`Pewpros-Signature: t=<unix>,v1=<hex>` where
-`v1 = HMAC_SHA256(secret, "<t>.<rawBody>")`. The node recomputes it with the
-subscription secret and rejects mismatches with `401`. Leave it enabled.
+**Signature verification is always on** and cannot be turned off. Each
+delivery carries `Pewpros-Signature: t=<unix>,v1=<hex>` where
+`v1 = HMAC_SHA256(secret, "<t>.<rawBody>")`, computed over the exact bytes
+received. The node answers `401` and runs nothing when:
+
+- the header is missing or malformed, or no `v1` matches the subscription
+  secret (several `v1=` values are accepted, so the secret can be rotated);
+- `t` is more than 5 minutes from the n8n host's clock (replayed or delayed
+  delivery; keep the host's clock synced);
+- the raw request body is unavailable (the node never re-serialises the body to
+  verify it).
+
+**Duplicate deliveries** are dropped. Pewpros retries failed sends, and each
+event keeps its `id` (`evt_...`). The node remembers the last 1000 event ids in
+the workflow's static data; a repeated id is answered `200` without starting the
+workflow. Two copies arriving at the same instant on separate queue-mode workers
+could both run; Pewpros spaces its retries, so this does not happen in practice.
 
 ## Poll Trigger
 
-Waiver signatures and affiliate leads are not (yet) outbound-webhook topics, so
-the **Pewpros Poll Trigger** node covers them by polling on the schedule you
-choose in n8n's **Poll Times** setting:
+Affiliate leads are not (yet) an outbound-webhook topic, so the **Pewpros Poll
+Trigger** node covers them by polling on the schedule you choose in n8n's
+**Poll Times** setting:
 
 - **New Waiver Signature** — optionally filtered by waiver, contact, event, or
-  course.
+  course. *Replaced by the `waiver.signed` topic on the **Pewpros Trigger** for
+  new workflows* (real time, no polling). It keeps working for existing
+  workflows.
 - **New Affiliate Lead** — optionally filtered by status or source.
 
 It uses the API's `updated_since` cursor (inclusive, ascending): each poll
@@ -157,6 +193,7 @@ later will be emitted again.
 npm install
 npm run build      # compile TypeScript + copy icons to dist/
 npm run lint       # n8n community node lint rules
+npm test           # build, then run the unit tests (node:test)
 npm run dev        # tsc --watch
 ```
 

@@ -1,9 +1,12 @@
 import {
-  IAuthenticateGeneric,
+  ICredentialDataDecryptedObject,
   ICredentialTestRequest,
   ICredentialType,
+  IHttpRequestOptions,
   INodeProperties,
 } from 'n8n-workflow';
+
+import { assertSecureRequestTarget } from '../utils/PewprosHttp';
 
 export class PewprosApi implements ICredentialType {
   name = 'pewprosApi';
@@ -28,18 +31,26 @@ export class PewprosApi implements ICredentialType {
       type: 'string',
       default: 'https://app.pewpros.com',
       required: true,
-      description: 'Base URL of your Pewpros instance, without a trailing slash. Example dev value: https://dev.pewpros.com.',
+      description:
+        'Base URL of your Pewpros instance, without a trailing slash. Must be https:// (http is only allowed for localhost). Example dev value: https://dev.pewpros.com.',
     },
   ];
 
-  authenticate: IAuthenticateGeneric = {
-    type: 'generic',
-    properties: {
+  // Refuses to attach the token to any request that is not https (loopback
+  // excepted): the credential test and HTTP Request nodes alike.
+  async authenticate(
+    credentials: ICredentialDataDecryptedObject,
+    requestOptions: IHttpRequestOptions,
+  ): Promise<IHttpRequestOptions> {
+    assertSecureRequestTarget(requestOptions, credentials.baseUrl as string | undefined);
+    return {
+      ...requestOptions,
       headers: {
-        Authorization: '=Bearer {{$credentials.apiToken}}',
+        ...(requestOptions.headers ?? {}),
+        Authorization: `Bearer ${credentials.apiToken as string}`,
       },
-    },
-  };
+    };
+  }
 
   test: ICredentialTestRequest = {
     request: {
